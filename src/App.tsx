@@ -1,10 +1,25 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useId, useState } from "react";
+import reactLogo from "./assets/react.svg";
+import viteLogo from "/vite.svg";
+import "./App.css";
+import SignalingChannel from "./signaling";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [count, setCount] = useState(0);
+  const peerId = useId();
+  const [channel, setChannel] = useState<SignalingChannel>();
+
+  useEffect(() => {
+    const url = "http://localhost:3030";
+    const token = "SIGNALING123";
+    setChannel(new SignalingChannel(peerId, url, token));
+  }, [peerId]);
+
+  useEffect(() => {
+    if (channel) {
+      channel.connect();
+    }
+  }, [channel]);
 
   return (
     <>
@@ -29,7 +44,7 @@ function App() {
         Click on the Vite and React logos to learn more
       </p>
     </>
-  )
+  );
 }
 
-export default App
+export default App;
