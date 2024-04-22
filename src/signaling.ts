@@ -1,10 +1,34 @@
 import { Socket, io } from "socket.io-client";
 
+type OfferMessage = {
+  offer: {
+    type: "offer";
+    sdp: string;
+  };
+};
+
+type AnswerMessage = {
+  answer: {
+    type: "answer";
+    sdp: string;
+  };
+};
+
+type IceCandidateMessage = {
+  candidate: RTCIceCandidate;
+};
+
+export type Message = {
+  from: string;
+  target: "all";
+  message: OfferMessage | AnswerMessage | IceCandidateMessage;
+};
+
 // This is a bare minimum example of how one might setup a signaling channel as a class
 export default class SignalingChannel {
   public peerId: string;
   public socket: Socket;
-  public onMessage: () => void;
+  public onMessage: (message: Message) => void | Promise<void>;
 
   constructor(peerId: string, signalingServerUrl: string, token: string) {
     this.peerId = peerId;
@@ -16,32 +40,39 @@ export default class SignalingChannel {
     });
     this.onMessage = () => {};
   }
-  connect() {
-    this.socket.on("connect", () => {
-      console.log("Connected with id", this.socket.id);
-      this.socket.emit("ready", this.peerId);
+  async connect() {
+    return new Promise<void>((resolve) => {
+      this.socket.on("connect", () => {
+        console.log("Connected with id", this.socket.id);
+        this.socket.emit("ready", this.peerId);
+        resolve();
+      });
+      this.socket.on("disconnect", () => {
+        console.log("Disconnected");
+      });
+      this.socket.on("connect_error", (error) => {
+        console.log("Connection error", error.message);
+      });
+      this.socket.on("message", this.onMessage);
+      this.socket.on("uniquenessError", (message) => {
+        console.log("Error:", message);
+        // process.exit(1);
+      });
+      this.socket.connect();
     });
-    this.socket.on("disconnect", () => {
-      console.log("Disconnected");
-    });
-    this.socket.on("connect_error", (error) => {
-      console.log("Connection error", error.message);
-    });
-    this.socket.on("message", this.onMessage);
-    this.socket.on("uniquenessError", (message) => {
-      console.error(`Error: ${message.error}`);
-      // process.exit(1);
-    });
-    this.socket.connect();
   }
-  send(message: string) {
-    this.socket.emit("message", { from: this.peerId, target: "all", message });
+  send(message: object) {
+    this.socket.emit("message", {
+      from: this.peerId,
+      target: "all",
+      message: message,
+    });
   }
-  sendTo(targetPeerId: string, message: string) {
+  sendTo(targetPeerId: string, message: object) {
     this.socket.emit("messageOne", {
       from: this.peerId,
       target: targetPeerId,
-      message,
+      message: message,
     });
   }
   disconnect() {
