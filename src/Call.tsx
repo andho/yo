@@ -1,3 +1,7 @@
+import { useParams } from "react-router-dom";
+
 export default function Call() {
-  return <div> Call</div>;
+  const { callId } = useParams();
+
+  return <div>Call {callId}</div>;
 }
