@@ -58,7 +58,6 @@ export default class SignalingChannel {
       reconnection: false, // disables auto reconnection, this can occur when for example the host server disconnects. When set to true, the client would keep trying to reconnect
       // for a complete list of the available options, see https://socket.io/docs/v4/client-api/#new-Manager-url-options
     });
-    this.onMessage = () => {};
   }
   async connect() {
     return new Promise<void>((resolve) => {

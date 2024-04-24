@@ -6,9 +6,11 @@ import SignalingChannel, {
   OfferMessage,
 } from "./signaling";
 import ShortUniqueId from "short-unique-id";
-import { useCallback, useEffect, useState } from "react";
+import { FC, useCallback, useEffect, useState } from "react";
 import usePeersStore, { Peer } from "./chat";
 import { useShallow } from "zustand/react/shallow";
+import useSWR from "swr";
+import { loadAudio } from "./audio";
 
 const configuration = {
   iceServers: [
@@ -20,16 +22,37 @@ const configuration = {
   ],
 };
 
-const url = "http://localhost:3030";
+const url = "https://yosignal.andho.xyz";
 const token = "SIGNALING123";
 const idGenerator = new ShortUniqueId({ length: 10 });
+
+const audioSrc = "/audio/yo.mp3";
+//const audioSrc = "http://localhost:5173/audio/the_xx_-_intro.mp3";
 
 export default function Call() {
   const { callId } = useParams();
   const [peerId] = useState(idGenerator.rnd());
   const peers = usePeersStore((state) => state.peers);
+  const [src, setSrc] = useState<string>();
+  const [start, setStart] = useState(false);
   //console.log("peers", peers);
   const [signalingService] = useState(new SignalingChannel(peerId, url, token));
+
+  const { data: audio } = useSWR(src, async (src_) => {
+    return loadAudio(src_);
+  });
+
+  //console.log("audio", audio);
+
+  //useEffect(() => {
+  //  if (audio) {
+  //    const src = ctx.createBufferSource();
+  //    src.buffer = audio;
+  //    //src.connect(bq);
+
+  //    src.start();
+  //  }
+  //}, [audio]);
 
   const { addPeer, removePeer, setDataChannel, setMakingOffer, setBePolite } =
     usePeersStore(
@@ -47,19 +70,6 @@ export default function Call() {
       console.log("add peer", peerId);
       const pc = new RTCPeerConnection(configuration);
       const dataChannel = pc.createDataChannel("sendChannel");
-      console.log("setting up data channel handlers");
-      dataChannel.addEventListener("open", (event) =>
-        console.log("channel open", event)
-      );
-      dataChannel.addEventListener("close", (event) =>
-        console.log("channel close", event)
-      );
-      dataChannel.addEventListener("error", (event) =>
-        console.log("channel error", event)
-      );
-      dataChannel.addEventListener("message", (event) =>
-        console.log("channel message", event)
-      );
 
       pc.addEventListener("negotiationneeded", async () => {
         setMakingOffer(peerId, true);
@@ -87,31 +97,6 @@ export default function Call() {
     [removePeer]
   );
 
-  const handleRemoteDataChannel = useCallback(
-    (peerId: string, dataChannel: RTCDataChannel) => {
-      const peer = peers[peerId];
-      if (!peer) {
-        console.log("cannot find peer", peerId);
-      }
-
-      dataChannel.addEventListener("open", (event) =>
-        console.log("channel open", event)
-      );
-      dataChannel.addEventListener("close", (event) =>
-        console.log("channel close", event)
-      );
-      dataChannel.addEventListener("error", (event) =>
-        console.log("channel error", event)
-      );
-      dataChannel.addEventListener("message", (event) =>
-        console.log("channel message", event)
-      );
-
-      setDataChannel(peerId, dataChannel);
-    },
-    [peers, setDataChannel]
-  );
-
   const handleOffer = useCallback(
     async (peerId: string, offer: OfferMessage) => {
       console.log("received offer");
@@ -119,10 +104,10 @@ export default function Call() {
 
       const peer = peers[peerId];
 
-      if (
-        (peer?.makingOffer && peer?.bePolite) ||
-        peer?.conn.signalingState !== "stable"
-      ) {
+      const offerCollision =
+        peer?.makingOffer || peer?.conn.signalingState !== "stable";
+
+      if (!peer?.bePolite && offerCollision) {
         console.log("not looking for offers a the time. reject offer");
         return;
       }
@@ -140,7 +125,7 @@ export default function Call() {
 
       peerConnection.addEventListener("datachannel", ({ channel }) => {
         console.log("data channel", channel);
-        handleRemoteDataChannel(peerId, channel);
+        setDataChannel(peerId, channel);
       });
 
       await peerConnection.setRemoteDescription(
@@ -154,7 +139,7 @@ export default function Call() {
 
       addPeer(peerId, peerConnection);
     },
-    [addPeer, handleRemoteDataChannel, peers, signalingService]
+    [addPeer, peers, setDataChannel, signalingService]
   );
 
   const handleAnswer = useCallback(
@@ -226,23 +211,110 @@ export default function Call() {
     handleCandidate,
   ]);
 
-  const handleSendPress = useCallback((peer: Peer) => {
-    peer.dataChannel?.send(`${Math.random()}`);
+  const handleStart = useCallback(() => {
+    setSrc(audioSrc);
+    setStart(true);
   }, []);
 
   return (
     <div>
-      <div>Call {callId}</div>
-      <div>
-        <ul>
-          {Object.values(peers).map((peer) => (
-            <li key={peer.peerId}>
-              {peer.peerId}
-              <button onClick={() => handleSendPress(peer)}>Send</button>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {!start ? (
+        <button onClick={handleStart}>Start</button>
+      ) : audio ? (
+        <>
+          <div>Call {callId}</div>
+          <div>
+            <ul>
+              {Object.values(peers).map((peer) => (
+                <PeerCircle key={peer.peerId} peer={peer} audio={audio} />
+              ))}
+            </ul>
+          </div>
+        </>
+      ) : (
+        <div>Loading...</div>
+      )}
     </div>
   );
 }
+
+function playYo(audio: AudioBuffer) {
+  const ctx = new AudioContext();
+  const src = ctx.createBufferSource();
+
+  //const g = ctx.createGain();
+  //g.gain.value = 4;
+  //g.connect(ctx.destination);
+
+  //const bq = ctx.createBiquadFilter();
+  //bq.type = "lowpass";
+  //bq.frequency.value = 2000;
+  //bq.gain.value = 0;
+  //bq.connect(g);
+  //bq.connect(ctx.destination);
+
+  src.buffer = audio;
+  src.connect(ctx.destination);
+  console.log("playing yo");
+  src.start();
+}
+
+type PeerCircleProps = {
+  peer: Peer;
+  audio: AudioBuffer;
+};
+
+const PeerCircle: FC<PeerCircleProps> = ({ peer, audio }) => {
+  const handleSendPress = useCallback(async (peer: Peer) => {
+    peer.dataChannel?.send("yo");
+  }, []);
+
+  useEffect(() => {
+    const dataChannel = peer.dataChannel;
+
+    if (!dataChannel) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
+    console.log("setting up data channel handlers");
+    dataChannel.addEventListener(
+      "open",
+      (event) => console.log("channel open", event),
+      { signal }
+    );
+    dataChannel.addEventListener(
+      "close",
+      (event) => console.log("channel close", event),
+      { signal }
+    );
+    dataChannel.addEventListener(
+      "error",
+      (event) => console.log("channel error", event),
+      { signal }
+    );
+    dataChannel.addEventListener(
+      "message",
+      (event) => {
+        console.log("channel message", event);
+        if (!audio) {
+          console.log("audio not available");
+          return;
+        }
+        playYo(audio);
+      },
+      { signal }
+    );
+
+    return () => abortController.abort();
+  }, [audio, peer]);
+
+  return (
+    <li>
+      {peer.peerId}
+      <button onClick={() => handleSendPress(peer)}>Send</button>
+    </li>
+  );
+};

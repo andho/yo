@@ -5,7 +5,17 @@ services:
     image: node:lts
     volumes:
       - .:/app
+      - $HOME/.dockercache/appuser/yarn:/root/.yarn
     working_dir: /app
     command: yarn run dev
     ports:
       - 5173:5173
+  preview:
+    image: node:lts
+    volumes:
+      - .:/app
+      - $HOME/.dockercache/appuser/yarn:/root/.yarn
+    working_dir: /app
+    command: yarn run preview --host
+    ports:
+      - 4173:4173
