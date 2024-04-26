@@ -6,7 +6,7 @@ import SignalingChannel, {
   OfferMessage,
 } from "./signaling";
 import ShortUniqueId from "short-unique-id";
-import { FC, useCallback, useEffect, useState } from "react";
+import { FC, PropsWithChildren, useCallback, useEffect, useState } from "react";
 import usePeersStore, { Peer } from "./chat";
 import { useShallow } from "zustand/react/shallow";
 import useSWR from "swr";
@@ -218,22 +218,17 @@ export default function Call() {
 
   return (
     <div>
-      {!start ? (
-        <button onClick={handleStart}>Start</button>
-      ) : audio ? (
-        <>
-          <div>Call {callId}</div>
-          <div>
-            <ul>
-              {Object.values(peers).map((peer) => (
-                <PeerCircle key={peer.peerId} peer={peer} audio={audio} />
-              ))}
-            </ul>
-          </div>
-        </>
-      ) : (
-        <div>Loading...</div>
-      )}
+      {!start && <button onClick={handleStart}>Start</button>}
+      <div className="">
+        <div>Call {callId}</div>
+        <div className="flex gap-4 p-5">
+          <ul>
+            {Object.values(peers).map((peer) => (
+              <PeerCircle key={peer.peerId} peer={peer} audio={audio} />
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
@@ -261,10 +256,28 @@ function playYo(audio: AudioBuffer) {
 
 type PeerCircleProps = {
   peer: Peer;
-  audio: AudioBuffer;
+  audio?: AudioBuffer;
 };
 
+//type PeerStatus = {
+//  canTrickleIce: boolean;
+//  connStatus: string;
+//  iceConnectionStatus: string;
+//  iceGatheringStatus: string;
+//  signalingState: string;
+//  dataChannelStatus: string;
+//};
+
 const PeerCircle: FC<PeerCircleProps> = ({ peer, audio }) => {
+  //const [peerStatus, setPeerStatus] = useState<PeerStatus>({
+  //  canTrickleIce: false,
+  //  connStatus: "",
+  //  iceConnectionStatus: "",
+  //  iceGatheringStatus: "",
+  //  signalingState: "",
+  //  dataChannelStatus: "",
+  //});
+
   const handleSendPress = useCallback(async (peer: Peer) => {
     peer.dataChannel?.send("yo");
   }, []);
@@ -308,13 +321,100 @@ const PeerCircle: FC<PeerCircleProps> = ({ peer, audio }) => {
       { signal }
     );
 
+    //peer.conn.addEventListener(
+    //  "connectionstatechange",
+    //  () =>
+    //    setPeerStatus((prev) => ({
+    //      ...prev,
+    //      connStatus: peer.conn.connectionState,
+    //    })),
+    //  { signal }
+    //);
+
+    //peer.conn.addEventListener(
+    //  "iceconnectionstatechange",
+    //  () =>
+    //    setPeerStatus((prev) => ({
+    //      ...prev,
+    //      iceConnectionStatus: peer.conn.iceConnectionState,
+    //    })),
+    //  { signal }
+    //);
+
+    //peer.conn.addEventListener(
+    //  "iceconnectionstatechange",
+    //  () =>
+    //    setPeerStatus((prev) => ({
+    //      ...prev,
+    //      iceGatheringStatus: peer.conn.iceGatheringState,
+    //    })),
+    //  { signal }
+    //);
+
+    //peer.conn.addEventListener(
+    //  "iceconnectionstatechange",
+    //  () =>
+    //    setPeerStatus((prev) => ({
+    //      ...prev,
+    //      signalingState: peer.conn.signalingState,
+    //    })),
+    //  { signal }
+    //);
+
     return () => abortController.abort();
   }, [audio, peer]);
 
   return (
-    <li>
-      {peer.peerId}
-      <button onClick={() => handleSendPress(peer)}>Send</button>
+    <li className="border border-slate-200 rounded-lg bg-white p-3 flex flex-col gap-y-1 max-w-[300px]">
+      <div>
+        <span>Peer: </span>
+        <span className="font-bold">{peer.peerId}</span>
+      </div>
+      <Button onClick={() => handleSendPress(peer)} disabled={!audio}>
+        Send
+      </Button>
+      <div className="flex flex-col text-md">
+        <ul>
+          <li>Conn status: {peer.conn.connectionState || "-"}</li>
+          <li>Ice conn status: {peer.conn.iceConnectionState || "-"}</li>
+          <li>Ice gathering status: {peer.conn.iceGatheringState || "-"}</li>
+          <li>Signaling State: {peer.conn.signalingState || "-"}</li>
+          <li>
+            Can Trickle: {peer.conn.canTrickleIceCandidates ? "yes" : "no"}
+          </li>
+        </ul>
+      </div>
+      <div className="flex flex-col">
+        <span>Local description: </span>
+        {peer.conn.localDescription?.sdp}
+      </div>
+      <div className="flex flex-col">
+        <span>Remote description: </span>
+        {peer.conn.remoteDescription?.sdp}
+      </div>
     </li>
   );
 };
+
+type ButtonProps = {
+  onClick: () => void;
+  disabled?: boolean;
+};
+
+const Button: FC<PropsWithChildren<ButtonProps>> = ({
+  onClick,
+  disabled = false,
+  children,
+}) => (
+  <button
+    className={`${
+      disabled
+        ? "bg-sky-300 text-sky-200"
+        : "bg-sky-600 text-sky-50 hover:bg-sky-500"
+    } rounded-md p-0.5 transition:color duration-100`}
+    onClick={onClick}
+    disabled={disabled}
+  >
+    {children}
+  </button>
+);

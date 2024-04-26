@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom";
-import "./App.css";
 import ShortUniqueId from "short-unique-id";
 
 const idGenerator = new ShortUniqueId({ length: 10 });
