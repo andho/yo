@@ -1,16 +1,12 @@
 import { useParams } from "react-router-dom";
-import SignalingChannel, {
-  AnswerMessage,
-  IceCandidateMessage,
-  Message,
-  OfferMessage,
-} from "./signaling";
+import SignalingChannel, { Message } from "./signaling";
 import ShortUniqueId from "short-unique-id";
 import { FC, PropsWithChildren, useCallback, useEffect, useState } from "react";
 import usePeersStore, { Peer } from "./chat";
 import { useShallow } from "zustand/react/shallow";
 import useSWR from "swr";
 import { loadAudio } from "./audio";
+import PeerJs, { DataConnection } from "peerjs";
 
 const configuration = {
   iceServers: [
@@ -23,6 +19,7 @@ const configuration = {
 };
 
 const url = "https://yosignal.andho.xyz";
+//const url = "http://localhost:3030";
 const token = "SIGNALING123";
 const idGenerator = new ShortUniqueId({ length: 10 });
 
@@ -32,11 +29,24 @@ const audioSrc = "/audio/yo.mp3";
 export default function Call() {
   const { callId } = useParams();
   const [peerId] = useState(idGenerator.rnd());
+  const [peerjs] = useState(new PeerJs(peerId, { config: configuration }));
   const peers = usePeersStore((state) => state.peers);
   const [src, setSrc] = useState<string>();
   const [start, setStart] = useState(false);
   //console.log("peers", peers);
   const [signalingService] = useState(new SignalingChannel(peerId, url, token));
+
+  useEffect(() => {
+    peerjs.on("error", (e) => console.log("peer error", e));
+    peerjs.on("open", (id) => {
+      console.log("connected to peerjs server", id);
+    });
+    //peerjs.on("connection", (dc) =>
+    //  console.log("data connection established", dc)
+    //);
+    peerjs.on("close", () => console.log("peer destroyed"));
+    peerjs.on("disconnected", () => console.log("disconnected"));
+  }, [peerjs]);
 
   const { data: audio } = useSWR(src, async (src_) => {
     return loadAudio(src_);
@@ -54,39 +64,40 @@ export default function Call() {
   //  }
   //}, [audio]);
 
-  const { addPeer, removePeer, setDataChannel, setMakingOffer, setBePolite } =
-    usePeersStore(
-      useShallow((state) => ({
-        addPeer: state.addPeer,
-        removePeer: state.removePeer,
-        setDataChannel: state.setDataChannel,
-        setMakingOffer: state.setMakingOffer,
-        setBePolite: state.setBePolite,
-      }))
-    );
+  const { addPeer, removePeer } = usePeersStore(
+    useShallow((state) => ({
+      addPeer: state.addPeer,
+      removePeer: state.removePeer,
+      setDataChannel: state.setDataChannel,
+      setMakingOffer: state.setMakingOffer,
+      setBePolite: state.setBePolite,
+    }))
+  );
 
   const handleNewPeer = useCallback(
-    (peerId: string, bePolite: boolean) => {
-      console.log("add peer", peerId);
-      const pc = new RTCPeerConnection(configuration);
-      const dataChannel = pc.createDataChannel("sendChannel");
+    (newPeerId: string) => {
+      console.log("add peer", newPeerId);
+      //const pc = new RTCPeerConnection(configuration);
+      //const dataChannel = pc.createDataChannel("sendChannel");
 
-      pc.addEventListener("negotiationneeded", async () => {
-        setMakingOffer(peerId, true);
-        try {
-          await pc.setLocalDescription();
-          signalingService.sendTo(peerId, { offer: pc.localDescription });
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setMakingOffer(peerId, false);
-        }
-      });
+      //pc.addEventListener("negotiationneeded", async () => {
+      //  setMakingOffer(newPeerId, true);
+      //  try {
+      //    await pc.setLocalDescription();
+      //    signalingService.sendTo(newPeerId, { offer: pc.localDescription });
+      //  } catch (e) {
+      //    console.error(e);
+      //  } finally {
+      //    setMakingOffer(newPeerId, false);
+      //  }
+      //});
 
-      addPeer(peerId, pc, dataChannel);
-      setBePolite(peerId, bePolite);
+      //const dataChannel = peer.connect(newPeerId);
+
+      addPeer(newPeerId);
+      //setBePolite(newPeerId, bePolite);
     },
-    [addPeer, setBePolite, setMakingOffer, signalingService]
+    [addPeer]
   );
 
   const handleRemovePeer = useCallback(
@@ -97,75 +108,75 @@ export default function Call() {
     [removePeer]
   );
 
-  const handleOffer = useCallback(
-    async (peerId: string, offer: OfferMessage) => {
-      console.log("received offer");
-      // @todo if making offer, don't do anything
+  //const handleOffer = useCallback(
+  //  async (peerId: string, offer: OfferMessage) => {
+  //    console.log("received offer");
+  //    // @todo if making offer, don't do anything
 
-      const peer = peers[peerId];
+  //    const peer = peers[peerId];
 
-      const offerCollision =
-        peer?.makingOffer || peer?.conn.signalingState !== "stable";
+  //    const offerCollision =
+  //      peer?.makingOffer || peer?.conn.signalingState !== "stable";
 
-      if (!peer?.bePolite && offerCollision) {
-        console.log("not looking for offers a the time. reject offer");
-        return;
-      }
+  //    if (!peer?.bePolite && offerCollision) {
+  //      console.log("not looking for offers a the time. reject offer");
+  //      return;
+  //    }
 
-      const peerConnection = peer?.conn ?? new RTCPeerConnection(configuration);
+  //    const peerConnection = peer?.conn ?? new RTCPeerConnection(configuration);
 
-      peerConnection.addEventListener("icecandidate", ({ candidate }) => {
-        if (!candidate) {
-          console.log("empty ice candidate", candidate);
-          return;
-        }
-        console.log("sending ice candidate", candidate);
-        signalingService.send({ candidate });
-      });
+  //    peerConnection.addEventListener("icecandidate", ({ candidate }) => {
+  //      if (!candidate) {
+  //        console.log("empty ice candidate", candidate);
+  //        return;
+  //      }
+  //      console.log("sending ice candidate", candidate);
+  //      signalingService.send({ candidate });
+  //    });
 
-      peerConnection.addEventListener("datachannel", ({ channel }) => {
-        console.log("data channel", channel);
-        setDataChannel(peerId, channel);
-      });
+  //    peerConnection.addEventListener("datachannel", ({ channel }) => {
+  //      console.log("data channel", channel);
+  //      setDataChannel(peerId, channel);
+  //    });
 
-      await peerConnection.setRemoteDescription(
-        new RTCSessionDescription(offer.offer)
-      );
-      await peerConnection.setLocalDescription();
-      console.log("sending answer");
-      signalingService.sendTo(peerId, {
-        answer: peerConnection.localDescription,
-      });
+  //    await peerConnection.setRemoteDescription(
+  //      new RTCSessionDescription(offer.offer)
+  //    );
+  //    await peerConnection.setLocalDescription();
+  //    console.log("sending answer");
+  //    signalingService.sendTo(peerId, {
+  //      answer: peerConnection.localDescription,
+  //    });
 
-      addPeer(peerId, peerConnection);
-    },
-    [addPeer, peers, setDataChannel, signalingService]
-  );
+  //    addPeer(peerId, peerConnection);
+  //  },
+  //  [addPeer, peers, setDataChannel, signalingService]
+  //);
 
-  const handleAnswer = useCallback(
-    async (peerId: string, answer: AnswerMessage) => {
-      const peer = peers[peerId];
-      if (!peer) {
-        console.log("cannot find peer", peerId);
-      }
+  //const handleAnswer = useCallback(
+  //  async (peerId: string, answer: AnswerMessage) => {
+  //    const peer = peers[peerId];
+  //    if (!peer) {
+  //      console.log("cannot find peer", peerId);
+  //    }
 
-      peer.conn.setRemoteDescription(answer.answer);
-    },
-    [peers]
-  );
+  //    peer.conn.setRemoteDescription(answer.answer);
+  //  },
+  //  [peers]
+  //);
 
-  const handleCandidate = useCallback(
-    async (peerId: string, candidate: IceCandidateMessage) => {
-      const peer = peers[peerId];
-      if (!peer) {
-        console.log("cannot find peer", peerId);
-      }
+  //const handleCandidate = useCallback(
+  //  async (peerId: string, candidate: IceCandidateMessage) => {
+  //    const peer = peers[peerId];
+  //    if (!peer) {
+  //      console.log("cannot find peer", peerId);
+  //    }
 
-      console.log("received ice candidate added");
-      peer.conn.addIceCandidate(candidate.candidate);
-    },
-    [peers]
-  );
+  //    console.log("received ice candidate added");
+  //    peer.conn.addIceCandidate(candidate.candidate);
+  //  },
+  //  [peers]
+  //);
 
   useEffect(() => {
     const onMessage = async (parcel: Message) => {
@@ -176,20 +187,14 @@ export default function Call() {
         "connections" in parcel.payload
       ) {
         for (const connection of parcel.payload.connections) {
-          handleNewPeer(connection.peerId, parcel.payload.bePolite);
+          handleNewPeer(connection.peerId);
         }
       } else if (parcel.payload?.action === "close") {
         handleRemovePeer(parcel.from);
       } else if (parcel.payload?.action === "open") {
         for (const connection of parcel.payload.connections) {
-          handleNewPeer(connection.peerId, parcel.payload.bePolite);
+          handleNewPeer(connection.peerId);
         }
-      } else if ("offer" in parcel.message) {
-        handleOffer(parcel.from, parcel.message);
-      } else if ("answer" in parcel.message) {
-        handleAnswer(parcel.from, parcel.message);
-      } else if ("candidate" in parcel.message) {
-        handleCandidate(parcel.from, parcel.message);
       }
     };
 
@@ -201,15 +206,7 @@ export default function Call() {
     connect();
 
     return () => signalingService.removeMessageHandler(onMessage);
-  }, [
-    signalingService,
-    peerId,
-    handleNewPeer,
-    handleRemovePeer,
-    handleOffer,
-    handleAnswer,
-    handleCandidate,
-  ]);
+  }, [signalingService, peerId, handleNewPeer, handleRemovePeer]);
 
   const handleStart = useCallback(() => {
     setSrc(audioSrc);
@@ -218,17 +215,27 @@ export default function Call() {
 
   return (
     <div>
-      {!start && <button onClick={handleStart}>Start</button>}
       <div className="">
         <div>Call {callId}</div>
+        <div>Peer ID {peerId}</div>
         <div className="flex gap-4 p-5">
           <ul>
             {Object.values(peers).map((peer) => (
-              <PeerCircle key={peer.peerId} peer={peer} audio={audio} />
+              <PeerCircle
+                key={peer.peerId}
+                peerjs={peerjs}
+                peer={peer}
+                audio={audio}
+              />
             ))}
           </ul>
         </div>
       </div>
+      {!start && (
+        <div className="flex m-5">
+          <Button onClick={handleStart}>Start</Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -255,6 +262,7 @@ function playYo(audio: AudioBuffer) {
 }
 
 type PeerCircleProps = {
+  peerjs: PeerJs;
   peer: Peer;
   audio?: AudioBuffer;
 };
@@ -268,7 +276,7 @@ type PeerCircleProps = {
 //  dataChannelStatus: string;
 //};
 
-const PeerCircle: FC<PeerCircleProps> = ({ peer, audio }) => {
+const PeerCircle: FC<PeerCircleProps> = ({ peerjs, peer, audio }) => {
   //const [peerStatus, setPeerStatus] = useState<PeerStatus>({
   //  canTrickleIce: false,
   //  connStatus: "",
@@ -278,91 +286,46 @@ const PeerCircle: FC<PeerCircleProps> = ({ peer, audio }) => {
   //  dataChannelStatus: "",
   //});
 
-  const handleSendPress = useCallback(async (peer: Peer) => {
-    peer.dataChannel?.send("yo");
-  }, []);
+  const [dataChannel, setDataChannel] = useState<DataConnection>();
 
   useEffect(() => {
-    const dataChannel = peer.dataChannel;
+    peerjs.on("open", (id) => {
+      console.log("connected to peerjs server", id);
+      const dataChannel = peerjs.connect(peer.peerId);
+      setDataChannel(dataChannel);
+    });
+    peerjs.on("connection", (dc) => {
+      console.log("data connection received");
+      if (dc.peer !== peer.peerId) {
+        return;
+      }
+      console.log("data connection established", dc.peer);
+      setDataChannel(dc);
+    });
+  }, [peer.peerId, peerjs]);
 
+  const handleSendPress = useCallback(async () => {
+    dataChannel?.send("yo");
+  }, [dataChannel]);
+
+  useEffect(() => {
     if (!dataChannel) {
       return;
     }
 
-    const abortController = new AbortController();
-    const signal = abortController.signal;
-
     console.log("setting up data channel handlers");
-    dataChannel.addEventListener(
-      "open",
-      (event) => console.log("channel open", event),
-      { signal }
-    );
-    dataChannel.addEventListener(
-      "close",
-      (event) => console.log("channel close", event),
-      { signal }
-    );
-    dataChannel.addEventListener(
-      "error",
-      (event) => console.log("channel error", event),
-      { signal }
-    );
-    dataChannel.addEventListener(
-      "message",
-      (event) => {
-        console.log("channel message", event);
-        if (!audio) {
-          console.log("audio not available");
-          return;
-        }
-        playYo(audio);
-      },
-      { signal }
-    );
-
-    //peer.conn.addEventListener(
-    //  "connectionstatechange",
-    //  () =>
-    //    setPeerStatus((prev) => ({
-    //      ...prev,
-    //      connStatus: peer.conn.connectionState,
-    //    })),
-    //  { signal }
-    //);
-
-    //peer.conn.addEventListener(
-    //  "iceconnectionstatechange",
-    //  () =>
-    //    setPeerStatus((prev) => ({
-    //      ...prev,
-    //      iceConnectionStatus: peer.conn.iceConnectionState,
-    //    })),
-    //  { signal }
-    //);
-
-    //peer.conn.addEventListener(
-    //  "iceconnectionstatechange",
-    //  () =>
-    //    setPeerStatus((prev) => ({
-    //      ...prev,
-    //      iceGatheringStatus: peer.conn.iceGatheringState,
-    //    })),
-    //  { signal }
-    //);
-
-    //peer.conn.addEventListener(
-    //  "iceconnectionstatechange",
-    //  () =>
-    //    setPeerStatus((prev) => ({
-    //      ...prev,
-    //      signalingState: peer.conn.signalingState,
-    //    })),
-    //  { signal }
-    //);
-
-    return () => abortController.abort();
-  }, [audio, peer]);
+    dataChannel.on("open", () => console.log("channel open"));
+    dataChannel.on("close", () => console.log("channel close"));
+    dataChannel.on("error", (event) => console.log("channel error", event));
+    dataChannel.on("data", (data) => {
+      console.log("channel message", data);
+      if (!audio) {
+        console.log("audio not available");
+        return;
+      }
+      playYo(audio);
+    });
+  }, [audio, dataChannel]);
 
   return (
     <li className="border border-slate-200 rounded-lg bg-white p-3 flex flex-col gap-y-1 max-w-[300px]">
@@ -370,12 +333,13 @@ const PeerCircle: FC<PeerCircleProps> = ({ peer, audio }) => {
         <span>Peer: </span>
         <span className="font-bold">{peer.peerId}</span>
       </div>
-      <Button onClick={() => handleSendPress(peer)} disabled={!audio}>
+      <Button onClick={() => handleSendPress()} disabled={!audio}>
         Send
       </Button>
+      {/*
       <div className="flex flex-col text-md">
         <ul>
-          <li>Conn status: {peer.conn.connectionState || "-"}</li>
+          <li>Conn status: {peer.conn.connections || "-"}</li>
           <li>Ice conn status: {peer.conn.iceConnectionState || "-"}</li>
           <li>Ice gathering status: {peer.conn.iceGatheringState || "-"}</li>
           <li>Signaling State: {peer.conn.signalingState || "-"}</li>
@@ -391,7 +355,7 @@ const PeerCircle: FC<PeerCircleProps> = ({ peer, audio }) => {
       <div className="flex flex-col">
         <span>Remote description: </span>
         {peer.conn.remoteDescription?.sdp}
-      </div>
+      </div>*/}
     </li>
   );
 };
